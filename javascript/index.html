@@ -2864,7 +2864,7 @@
                                         <div id="backButton" class="field is-grouped">
                                                 <p class="control">
                                                         <span class="button is-info ghost-button is-small"
-                                                                @click="goBack">
+                                                                @click.prevent="goBack">
                                                                 <span>BACK</span>
                                                         </span>
                                                 </p>
@@ -2909,7 +2909,6 @@
                                                 });
                                 },
                                 goBack() {
-                                        history.back();
                                         this.pageContent = ""
                                 },
                         },
