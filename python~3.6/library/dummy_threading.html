@@ -1,0 +1,10 @@
+<h1 id="dummy-threading-drop-in-replacement-for-the-threading-module"> dummy_threading â€” Drop-in replacement for the threading module</h1> <p id="module-dummy_threading"><strong>Source code:</strong> Lib/dummy_threading.py</p> <p>This module provides a duplicate interface to the <a class="reference internal" href="threading#module-threading" title="threading: Thread-based parallelism."><code>threading</code></a> module. It is meant to be imported when the <a class="reference internal" href="_thread#module-_thread" title="_thread: Low-level threading API."><code>_thread</code></a> module is not provided on a platform.</p> <p>Suggested usage is:</p> <pre data-language="python">try:
+    import threading
+except ImportError:
+    import dummy_threading as threading
+</pre> <p>Be careful to not use this module where deadlock might occur from a thread being created that blocks waiting for another thread to be created. This often occurs with blocking I/O.</p><div class="_attribution">
+<p class="_attribution-p">
+    © 2001–2020 Python Software Foundation<br/>Licensed under the PSF License.<br/>
+https://docs.python.org/3.6/library/dummy_threading.html
+</p>
+</div>

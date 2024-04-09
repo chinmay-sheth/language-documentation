@@ -1,0 +1,45 @@
+<h1 id="pty-pseudo-terminal-utilities"> pty — Pseudo-terminal utilities</h1> <p id="module-pty"><strong>Source code:</strong> Lib/pty.py</p> <p>The <a class="reference internal" href="#module-pty" title="pty: Pseudo-Terminal Handling for Linux. (Linux)"><code>pty</code></a> module defines operations for handling the pseudo-terminal concept: starting another process and being able to write to and read from its controlling terminal programmatically.</p> <p>Because pseudo-terminal handling is highly platform dependent, there is code to do it only for Linux. (The Linux code is supposed to work on other platforms, but hasn’t been tested yet.)</p> <p>The <a class="reference internal" href="#module-pty" title="pty: Pseudo-Terminal Handling for Linux. (Linux)"><code>pty</code></a> module defines the following functions:</p> <dl class="function"> <dt id="pty.fork">
+<code>pty.fork()</code> </dt> <dd>
+<p>Fork. Connect the child’s controlling terminal to a pseudo-terminal. Return value is <code>(pid, fd)</code>. Note that the child gets <em>pid</em> 0, and the <em>fd</em> is <em>invalid</em>. The parent’s return value is the <em>pid</em> of the child, and <em>fd</em> is a file descriptor connected to the child’s controlling terminal (and also to the child’s standard input and output).</p> </dd>
+</dl> <dl class="function"> <dt id="pty.openpty">
+<code>pty.openpty()</code> </dt> <dd>
+<p>Open a new pseudo-terminal pair, using <a class="reference internal" href="os#os.openpty" title="os.openpty"><code>os.openpty()</code></a> if possible, or emulation code for generic Unix systems. Return a pair of file descriptors <code>(master, slave)</code>, for the master and the slave end, respectively.</p> </dd>
+</dl> <dl class="function"> <dt id="pty.spawn">
+<code>pty.spawn(argv[, master_read[, stdin_read]])</code> </dt> <dd>
+<p>Spawn a process, and connect its controlling terminal with the current process’s standard io. This is often used to baffle programs which insist on reading from the controlling terminal.</p> <p>The functions <em>master_read</em> and <em>stdin_read</em> should be functions which read from a file descriptor. The defaults try to read 1024 bytes each time they are called.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.4: </span><a class="reference internal" href="#pty.spawn" title="pty.spawn"><code>spawn()</code></a> now returns the status value from <a class="reference internal" href="os#os.waitpid" title="os.waitpid"><code>os.waitpid()</code></a> on the child process.</p> </div> </dd>
+</dl> <h2 id="example">
+<span class="section-number">35.8.1. </span>Example</h2> <p>The following program acts like the Unix command <em class="manpage">script(1)</em>, using a pseudo-terminal to record all input and output of a terminal session in a “typescript”.</p> <pre data-language="python">import argparse
+import os
+import pty
+import sys
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-a', dest='append', action='store_true')
+parser.add_argument('-p', dest='use_python', action='store_true')
+parser.add_argument('filename', nargs='?', default='typescript')
+options = parser.parse_args()
+
+shell = sys.executable if options.use_python else os.environ.get('SHELL', 'sh')
+filename = options.filename
+mode = 'ab' if options.append else 'wb'
+
+with open(filename, mode) as script:
+    def read(fd):
+        data = os.read(fd, 1024)
+        script.write(data)
+        return data
+
+    print('Script started, file is', filename)
+    script.write(('Script started on %s\n' % time.asctime()).encode())
+
+    pty.spawn(shell, read)
+
+    script.write(('Script done on %s\n' % time.asctime()).encode())
+    print('Script done, file is', filename)
+</pre><div class="_attribution">
+<p class="_attribution-p">
+    © 2001–2020 Python Software Foundation<br/>Licensed under the PSF License.<br/>
+https://docs.python.org/3.6/library/pty.html
+</p>
+</div>

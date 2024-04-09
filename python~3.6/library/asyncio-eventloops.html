@@ -1,0 +1,79 @@
+<h1 id="event-loops"> Event loops</h1> <p><strong>Source code:</strong> Lib/asyncio/events.py</p> <h2 id="event-loop-functions">
+<span class="section-number">18.5.2.1. </span>Event loop functions</h2> <p>The following functions are convenient shortcuts to accessing the methods of the global policy. Note that this provides access to the default policy, unless an alternative policy was set by calling <a class="reference internal" href="#asyncio.set_event_loop_policy" title="asyncio.set_event_loop_policy"><code>set_event_loop_policy()</code></a> earlier in the execution of the process.</p> <dl class="function"> <dt id="asyncio.get_event_loop">
+<code>asyncio.get_event_loop()</code> </dt> <dd>
+<p>Equivalent to calling <code>get_event_loop_policy().get_event_loop()</code>.</p> </dd>
+</dl> <dl class="function"> <dt id="asyncio.set_event_loop">
+<code>asyncio.set_event_loop(loop)</code> </dt> <dd>
+<p>Equivalent to calling <code>get_event_loop_policy().set_event_loop(loop)</code>.</p> </dd>
+</dl> <dl class="function"> <dt id="asyncio.new_event_loop">
+<code>asyncio.new_event_loop()</code> </dt> <dd>
+<p>Equivalent to calling <code>get_event_loop_policy().new_event_loop()</code>.</p> </dd>
+</dl> <h2 id="asyncio-event-loops">
+<span class="section-number">18.5.2.2. </span>Available event loops</h2> <p id="available-event-loops">asyncio currently provides two implementations of event loops: <a class="reference internal" href="#asyncio.SelectorEventLoop" title="asyncio.SelectorEventLoop"><code>SelectorEventLoop</code></a> and <a class="reference internal" href="#asyncio.ProactorEventLoop" title="asyncio.ProactorEventLoop"><code>ProactorEventLoop</code></a>.</p> <dl class="class"> <dt id="asyncio.SelectorEventLoop">
+<code>class asyncio.SelectorEventLoop</code> </dt> <dd>
+<p>Event loop based on the <a class="reference internal" href="selectors#module-selectors" title="selectors: High-level I/O multiplexing."><code>selectors</code></a> module. Subclass of <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop" title="asyncio.AbstractEventLoop"><code>AbstractEventLoop</code></a>.</p> <p>Use the most efficient selector available on the platform.</p> <p>On Windows, only sockets are supported (ex: pipes are not supported): see the MSDN documentation of select.</p> </dd>
+</dl> <dl class="class"> <dt id="asyncio.ProactorEventLoop">
+<code>class asyncio.ProactorEventLoop</code> </dt> <dd>
+<p>Proactor event loop for Windows using “I/O Completion Ports” aka IOCP. Subclass of <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop" title="asyncio.AbstractEventLoop"><code>AbstractEventLoop</code></a>.</p> <p>Availability: Windows.</p> <div class="admonition seealso"> <p class="admonition-title">See also</p> <p>MSDN documentation on I/O Completion Ports.</p> </div> </dd>
+</dl> <p>Example to use a <a class="reference internal" href="#asyncio.ProactorEventLoop" title="asyncio.ProactorEventLoop"><code>ProactorEventLoop</code></a> on Windows:</p> <pre data-language="python">import asyncio, sys
+
+if sys.platform == 'win32':
+    loop = asyncio.ProactorEventLoop()
+    asyncio.set_event_loop(loop)
+</pre> <h2 id="asyncio-platform-support">
+<span class="section-number">18.5.2.3. </span>Platform support</h2> <p id="platform-support">The <a class="reference internal" href="asyncio#module-asyncio" title="asyncio: Asynchronous I/O, event loop, coroutines and tasks."><code>asyncio</code></a> module has been designed to be portable, but each platform still has subtle differences and may not support all <a class="reference internal" href="asyncio#module-asyncio" title="asyncio: Asynchronous I/O, event loop, coroutines and tasks."><code>asyncio</code></a> features.</p> <h3 id="windows">
+<span class="section-number">18.5.2.3.1. </span>Windows</h3> <p>Common limits of Windows event loops:</p> <ul class="simple"> <li>
+<a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.create_unix_connection" title="asyncio.AbstractEventLoop.create_unix_connection"><code>create_unix_connection()</code></a> and <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.create_unix_server" title="asyncio.AbstractEventLoop.create_unix_server"><code>create_unix_server()</code></a> are not supported: the socket family <a class="reference internal" href="socket#socket.AF_UNIX" title="socket.AF_UNIX"><code>socket.AF_UNIX</code></a> is specific to UNIX</li> <li>
+<a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.add_signal_handler" title="asyncio.AbstractEventLoop.add_signal_handler"><code>add_signal_handler()</code></a> and <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.remove_signal_handler" title="asyncio.AbstractEventLoop.remove_signal_handler"><code>remove_signal_handler()</code></a> are not supported</li> <li>
+<code>EventLoopPolicy.set_child_watcher()</code> is not supported. <a class="reference internal" href="#asyncio.ProactorEventLoop" title="asyncio.ProactorEventLoop"><code>ProactorEventLoop</code></a> supports subprocesses. It has only one implementation to watch child processes, there is no need to configure it.</li> </ul> <p><a class="reference internal" href="#asyncio.SelectorEventLoop" title="asyncio.SelectorEventLoop"><code>SelectorEventLoop</code></a> specific limits:</p> <ul class="simple"> <li>
+<a class="reference internal" href="selectors#selectors.SelectSelector" title="selectors.SelectSelector"><code>SelectSelector</code></a> is used which only supports sockets and is limited to 512 sockets.</li> <li>
+<a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.add_reader" title="asyncio.AbstractEventLoop.add_reader"><code>add_reader()</code></a> and <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.add_writer" title="asyncio.AbstractEventLoop.add_writer"><code>add_writer()</code></a> only accept file descriptors of sockets</li> <li>Pipes are not supported (ex: <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.connect_read_pipe" title="asyncio.AbstractEventLoop.connect_read_pipe"><code>connect_read_pipe()</code></a>, <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.connect_write_pipe" title="asyncio.AbstractEventLoop.connect_write_pipe"><code>connect_write_pipe()</code></a>)</li> <li>
+<a class="reference internal" href="asyncio-subprocess#asyncio-subprocess"><span class="std std-ref">Subprocesses</span></a> are not supported (ex: <a class="reference internal" href="asyncio-subprocess#asyncio.AbstractEventLoop.subprocess_exec" title="asyncio.AbstractEventLoop.subprocess_exec"><code>subprocess_exec()</code></a>, <a class="reference internal" href="asyncio-subprocess#asyncio.AbstractEventLoop.subprocess_shell" title="asyncio.AbstractEventLoop.subprocess_shell"><code>subprocess_shell()</code></a>)</li> </ul> <p><a class="reference internal" href="#asyncio.ProactorEventLoop" title="asyncio.ProactorEventLoop"><code>ProactorEventLoop</code></a> specific limits:</p> <ul class="simple"> <li>
+<a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.create_datagram_endpoint" title="asyncio.AbstractEventLoop.create_datagram_endpoint"><code>create_datagram_endpoint()</code></a> (UDP) is not supported</li> <li>
+<a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.add_reader" title="asyncio.AbstractEventLoop.add_reader"><code>add_reader()</code></a> and <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop.add_writer" title="asyncio.AbstractEventLoop.add_writer"><code>add_writer()</code></a> are not supported</li> </ul> <p>The resolution of the monotonic clock on Windows is usually around 15.6 msec. The best resolution is 0.5 msec. The resolution depends on the hardware (availability of HPET) and on the Windows configuration. See <a class="reference internal" href="asyncio-eventloop#asyncio-delayed-calls"><span class="std std-ref">asyncio delayed calls</span></a>.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.5: </span><a class="reference internal" href="#asyncio.ProactorEventLoop" title="asyncio.ProactorEventLoop"><code>ProactorEventLoop</code></a> now supports SSL.</p> </div> <h3 id="mac-os-x">
+<span class="section-number">18.5.2.3.2. </span>Mac OS X</h3> <p>Character devices like PTY are only well supported since Mavericks (Mac OS 10.9). They are not supported at all on Mac OS 10.5 and older.</p> <p>On Mac OS 10.6, 10.7 and 10.8, the default event loop is <a class="reference internal" href="#asyncio.SelectorEventLoop" title="asyncio.SelectorEventLoop"><code>SelectorEventLoop</code></a> which uses <a class="reference internal" href="selectors#selectors.KqueueSelector" title="selectors.KqueueSelector"><code>selectors.KqueueSelector</code></a>. <a class="reference internal" href="selectors#selectors.KqueueSelector" title="selectors.KqueueSelector"><code>selectors.KqueueSelector</code></a> does not support character devices on these versions. The <a class="reference internal" href="#asyncio.SelectorEventLoop" title="asyncio.SelectorEventLoop"><code>SelectorEventLoop</code></a> can be used with <a class="reference internal" href="selectors#selectors.SelectSelector" title="selectors.SelectSelector"><code>SelectSelector</code></a> or <a class="reference internal" href="selectors#selectors.PollSelector" title="selectors.PollSelector"><code>PollSelector</code></a> to support character devices on these versions of Mac OS X. Example:</p> <pre data-language="python">import asyncio
+import selectors
+
+selector = selectors.SelectSelector()
+loop = asyncio.SelectorEventLoop(selector)
+asyncio.set_event_loop(loop)
+</pre> <h2 id="event-loop-policies-and-the-default-policy">
+<span class="section-number">18.5.2.4. </span>Event loop policies and the default policy</h2> <p>Event loop management is abstracted with a <em>policy</em> pattern, to provide maximal flexibility for custom platforms and frameworks. Throughout the execution of a process, a single global policy object manages the event loops available to the process based on the calling context. A policy is an object implementing the <a class="reference internal" href="#asyncio.AbstractEventLoopPolicy" title="asyncio.AbstractEventLoopPolicy"><code>AbstractEventLoopPolicy</code></a> interface.</p> <p>For most users of <a class="reference internal" href="asyncio#module-asyncio" title="asyncio: Asynchronous I/O, event loop, coroutines and tasks."><code>asyncio</code></a>, policies never have to be dealt with explicitly, since the default global policy is sufficient (see below).</p> <p>The module-level functions <a class="reference internal" href="#asyncio.get_event_loop" title="asyncio.get_event_loop"><code>get_event_loop()</code></a> and <a class="reference internal" href="#asyncio.set_event_loop" title="asyncio.set_event_loop"><code>set_event_loop()</code></a> provide convenient access to event loops managed by the default policy.</p> <h2 id="event-loop-policy-interface">
+<span class="section-number">18.5.2.5. </span>Event loop policy interface</h2> <p>An event loop policy must implement the following interface:</p> <dl class="class"> <dt id="asyncio.AbstractEventLoopPolicy">
+<code>class asyncio.AbstractEventLoopPolicy</code> </dt> <dd>
+<p>Event loop policy.</p> <dl class="method"> <dt id="asyncio.AbstractEventLoopPolicy.get_event_loop">
+<code>get_event_loop()</code> </dt> <dd>
+<p>Get the event loop for the current context.</p> <p>Returns an event loop object implementing the <a class="reference internal" href="asyncio-eventloop#asyncio.AbstractEventLoop" title="asyncio.AbstractEventLoop"><code>AbstractEventLoop</code></a> interface. In case called from coroutine, it returns the currently running event loop.</p> <p>Raises an exception in case no event loop has been set for the current context and the current policy does not specify to create one. It must never return <code>None</code>.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.6.</span></p> </div> </dd>
+</dl> <dl class="method"> <dt id="asyncio.AbstractEventLoopPolicy.set_event_loop">
+<code>set_event_loop(loop)</code> </dt> <dd>
+<p>Set the event loop for the current context to <em>loop</em>.</p> </dd>
+</dl> <dl class="method"> <dt id="asyncio.AbstractEventLoopPolicy.new_event_loop">
+<code>new_event_loop()</code> </dt> <dd>
+<p>Create and return a new event loop object according to this policy’s rules.</p> <p>If there’s need to set this loop as the event loop for the current context, <a class="reference internal" href="#asyncio.set_event_loop" title="asyncio.set_event_loop"><code>set_event_loop()</code></a> must be called explicitly.</p> </dd>
+</dl> </dd>
+</dl> <p>The default policy defines context as the current thread, and manages an event loop per thread that interacts with <a class="reference internal" href="asyncio#module-asyncio" title="asyncio: Asynchronous I/O, event loop, coroutines and tasks."><code>asyncio</code></a>. If the current thread doesn’t already have an event loop associated with it, the default policy’s <a class="reference internal" href="#asyncio.AbstractEventLoopPolicy.get_event_loop" title="asyncio.AbstractEventLoopPolicy.get_event_loop"><code>get_event_loop()</code></a> method creates one when called from the main thread, but raises <a class="reference internal" href="exceptions#RuntimeError" title="RuntimeError"><code>RuntimeError</code></a> otherwise.</p> <h2 id="access-to-the-global-loop-policy">
+<span class="section-number">18.5.2.6. </span>Access to the global loop policy</h2> <dl class="function"> <dt id="asyncio.get_event_loop_policy">
+<code>asyncio.get_event_loop_policy()</code> </dt> <dd>
+<p>Get the current event loop policy.</p> </dd>
+</dl> <dl class="function"> <dt id="asyncio.set_event_loop_policy">
+<code>asyncio.set_event_loop_policy(policy)</code> </dt> <dd>
+<p>Set the current event loop policy. If <em>policy</em> is <code>None</code>, the default policy is restored.</p> </dd>
+</dl> <h2 id="customizing-the-event-loop-policy">
+<span class="section-number">18.5.2.7. </span>Customizing the event loop policy</h2> <p>To implement a new event loop policy, it is recommended you subclass the concrete default event loop policy <code>DefaultEventLoopPolicy</code> and override the methods for which you want to change behavior, for example:</p> <pre data-language="python">class MyEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+
+    def get_event_loop(self):
+        """Get the event loop.
+
+        This may be None or an instance of EventLoop.
+        """
+        loop = super().get_event_loop()
+        # Do something with loop ...
+        return loop
+
+asyncio.set_event_loop_policy(MyEventLoopPolicy())
+</pre><div class="_attribution">
+<p class="_attribution-p">
+    © 2001–2020 Python Software Foundation<br/>Licensed under the PSF License.<br/>
+https://docs.python.org/3.6/library/asyncio-eventloops.html
+</p>
+</div>

@@ -1,0 +1,391 @@
+<h1 id="multiprocessing-process-based-parallelism"> multiprocessing — Process-based parallelism</h1> <p id="module-multiprocessing"><strong>Source code:</strong> Lib/multiprocessing/</p> <h2 id="introduction">
+<span class="section-number">17.2.1. </span>Introduction</h2> <p><a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> is a package that supports spawning processes using an API similar to the <a class="reference internal" href="threading#module-threading" title="threading: Thread-based parallelism."><code>threading</code></a> module. The <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> package offers both local and remote concurrency, effectively side-stepping the <span class="xref std std-term">Global Interpreter Lock</span> by using subprocesses instead of threads. Due to this, the <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> module allows the programmer to fully leverage multiple processors on a given machine. It runs on both Unix and Windows.</p> <p>The <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> module also introduces APIs which do not have analogs in the <a class="reference internal" href="threading#module-threading" title="threading: Thread-based parallelism."><code>threading</code></a> module. A prime example of this is the <a class="reference internal" href="#multiprocessing.pool.Pool" title="multiprocessing.pool.Pool"><code>Pool</code></a> object which offers a convenient means of parallelizing the execution of a function across multiple input values, distributing the input data across processes (data parallelism). The following example demonstrates the common practice of defining such functions in a module so that child processes can successfully import that module. This basic example of data parallelism using <a class="reference internal" href="#multiprocessing.pool.Pool" title="multiprocessing.pool.Pool"><code>Pool</code></a>,</p> <pre data-language="python">from multiprocessing import Pool
+
+def f(x):
+    return x*x
+
+if __name__ == '__main__':
+    with Pool(5) as p:
+        print(p.map(f, [1, 2, 3]))
+</pre> <p>will print to standard output</p> <pre data-language="python">[1, 4, 9]
+</pre> <h3 id="the-process-class">
+<span class="section-number">17.2.1.1. </span>The <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> class</h3> <p>In <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a>, processes are spawned by creating a <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> object and then calling its <a class="reference internal" href="#multiprocessing.Process.start" title="multiprocessing.Process.start"><code>start()</code></a> method. <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> follows the API of <a class="reference internal" href="threading#threading.Thread" title="threading.Thread"><code>threading.Thread</code></a>. A trivial example of a multiprocess program is</p> <pre data-language="python">from multiprocessing import Process
+
+def f(name):
+    print('hello', name)
+
+if __name__ == '__main__':
+    p = Process(target=f, args=('bob',))
+    p.start()
+    p.join()
+</pre> <p>To show the individual process IDs involved, here is an expanded example:</p> <pre data-language="python">from multiprocessing import Process
+import os
+
+def info(title):
+    print(title)
+    print('module name:', __name__)
+    print('parent process:', os.getppid())
+    print('process id:', os.getpid())
+
+def f(name):
+    info('function f')
+    print('hello', name)
+
+if __name__ == '__main__':
+    info('main line')
+    p = Process(target=f, args=('bob',))
+    p.start()
+    p.join()
+</pre> <p>For an explanation of why the <code>if __name__ == '__main__'</code> part is necessary, see <a class="reference internal" href="#multiprocessing-programming"><span class="std std-ref">Programming guidelines</span></a>.</p> <h3 id="contexts-and-start-methods">
+<span class="section-number">17.2.1.2. </span>Contexts and start methods</h3> <p id="multiprocessing-start-methods">Depending on the platform, <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> supports three ways to start a process. These <em>start methods</em> are</p> <dl> <dt><em>spawn</em></dt>
+<dd>
+<p>The parent process starts a fresh python interpreter process. The child process will only inherit those resources necessary to run the process objects <a class="reference internal" href="#multiprocessing.Process.run" title="multiprocessing.Process.run"><code>run()</code></a> method. In particular, unnecessary file descriptors and handles from the parent process will not be inherited. Starting a process using this method is rather slow compared to using <em>fork</em> or <em>forkserver</em>.</p> <p>Available on Unix and Windows. The default on Windows.</p> </dd> <dt><em>fork</em></dt>
+<dd>
+<p>The parent process uses <a class="reference internal" href="os#os.fork" title="os.fork"><code>os.fork()</code></a> to fork the Python interpreter. The child process, when it begins, is effectively identical to the parent process. All resources of the parent are inherited by the child process. Note that safely forking a multithreaded process is problematic.</p> <p>Available on Unix only. The default on Unix.</p> </dd> <dt><em>forkserver</em></dt>
+<dd>
+<p>When the program starts and selects the <em>forkserver</em> start method, a server process is started. From then on, whenever a new process is needed, the parent process connects to the server and requests that it fork a new process. The fork server process is single threaded so it is safe for it to use <a class="reference internal" href="os#os.fork" title="os.fork"><code>os.fork()</code></a>. No unnecessary resources are inherited.</p> <p>Available on Unix platforms which support passing file descriptors over Unix pipes.</p> </dd> </dl> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.4: </span><em>spawn</em> added on all unix platforms, and <em>forkserver</em> added for some unix platforms. Child processes no longer inherit all of the parents inheritable handles on Windows.</p> </div> <p>On Unix using the <em>spawn</em> or <em>forkserver</em> start methods will also start a <em>semaphore tracker</em> process which tracks the unlinked named semaphores created by processes of the program. When all processes have exited the semaphore tracker unlinks any remaining semaphores. Usually there should be none, but if a process was killed by a signal there may be some “leaked” semaphores. (Unlinking the named semaphores is a serious matter since the system allows only a limited number, and they will not be automatically unlinked until the next reboot.)</p> <p>To select a start method you use the <a class="reference internal" href="#multiprocessing.set_start_method" title="multiprocessing.set_start_method"><code>set_start_method()</code></a> in the <code>if __name__ == '__main__'</code> clause of the main module. For example:</p> <pre data-language="python">import multiprocessing as mp
+
+def foo(q):
+    q.put('hello')
+
+if __name__ == '__main__':
+    mp.set_start_method('spawn')
+    q = mp.Queue()
+    p = mp.Process(target=foo, args=(q,))
+    p.start()
+    print(q.get())
+    p.join()
+</pre> <p><a class="reference internal" href="#multiprocessing.set_start_method" title="multiprocessing.set_start_method"><code>set_start_method()</code></a> should not be used more than once in the program.</p> <p>Alternatively, you can use <a class="reference internal" href="#multiprocessing.get_context" title="multiprocessing.get_context"><code>get_context()</code></a> to obtain a context object. Context objects have the same API as the multiprocessing module, and allow one to use multiple start methods in the same program.</p> <pre data-language="python">import multiprocessing as mp
+
+def foo(q):
+    q.put('hello')
+
+if __name__ == '__main__':
+    ctx = mp.get_context('spawn')
+    q = ctx.Queue()
+    p = ctx.Process(target=foo, args=(q,))
+    p.start()
+    print(q.get())
+    p.join()
+</pre> <p>Note that objects related to one context may not be compatible with processes for a different context. In particular, locks created using the <em>fork</em> context cannot be passed to processes started using the <em>spawn</em> or <em>forkserver</em> start methods.</p> <p>A library which wants to use a particular start method should probably use <a class="reference internal" href="#multiprocessing.get_context" title="multiprocessing.get_context"><code>get_context()</code></a> to avoid interfering with the choice of the library user.</p> <h3 id="exchanging-objects-between-processes">
+<span class="section-number">17.2.1.3. </span>Exchanging objects between processes</h3> <p><a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> supports two types of communication channel between processes:</p> <p><strong>Queues</strong></p> <p>The <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a> class is a near clone of <a class="reference internal" href="queue#queue.Queue" title="queue.Queue"><code>queue.Queue</code></a>. For example:</p> <pre data-language="python">from multiprocessing import Process, Queue
+
+def f(q):
+    q.put([42, None, 'hello'])
+
+if __name__ == '__main__':
+    q = Queue()
+    p = Process(target=f, args=(q,))
+    p.start()
+    print(q.get())    # prints "[42, None, 'hello']"
+    p.join()
+</pre> <p>Queues are thread and process safe.</p> <p><strong>Pipes</strong></p> <p>The <a class="reference internal" href="#multiprocessing.Pipe" title="multiprocessing.Pipe"><code>Pipe()</code></a> function returns a pair of connection objects connected by a pipe which by default is duplex (two-way). For example:</p> <pre data-language="python">from multiprocessing import Process, Pipe
+
+def f(conn):
+    conn.send([42, None, 'hello'])
+    conn.close()
+
+if __name__ == '__main__':
+    parent_conn, child_conn = Pipe()
+    p = Process(target=f, args=(child_conn,))
+    p.start()
+    print(parent_conn.recv())   # prints "[42, None, 'hello']"
+    p.join()
+</pre> <p>The two connection objects returned by <a class="reference internal" href="#multiprocessing.Pipe" title="multiprocessing.Pipe"><code>Pipe()</code></a> represent the two ends of the pipe. Each connection object has <code>send()</code> and <code>recv()</code> methods (among others). Note that data in a pipe may become corrupted if two processes (or threads) try to read from or write to the <em>same</em> end of the pipe at the same time. Of course there is no risk of corruption from processes using different ends of the pipe at the same time.</p> <h3 id="synchronization-between-processes">
+<span class="section-number">17.2.1.4. </span>Synchronization between processes</h3> <p><a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> contains equivalents of all the synchronization primitives from <a class="reference internal" href="threading#module-threading" title="threading: Thread-based parallelism."><code>threading</code></a>. For instance one can use a lock to ensure that only one process prints to standard output at a time:</p> <pre data-language="python">from multiprocessing import Process, Lock
+
+def f(l, i):
+    l.acquire()
+    try:
+        print('hello world', i)
+    finally:
+        l.release()
+
+if __name__ == '__main__':
+    lock = Lock()
+
+    for num in range(10):
+        Process(target=f, args=(lock, num)).start()
+</pre> <p>Without using the lock output from the different processes is liable to get all mixed up.</p> <h3 id="sharing-state-between-processes">
+<span class="section-number">17.2.1.5. </span>Sharing state between processes</h3> <p>As mentioned above, when doing concurrent programming it is usually best to avoid using shared state as far as possible. This is particularly true when using multiple processes.</p> <p>However, if you really do need to use some shared data then <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> provides a couple of ways of doing so.</p> <p><strong>Shared memory</strong></p> <p>Data can be stored in a shared memory map using <a class="reference internal" href="#multiprocessing.Value" title="multiprocessing.Value"><code>Value</code></a> or <a class="reference internal" href="#multiprocessing.Array" title="multiprocessing.Array"><code>Array</code></a>. For example, the following code</p> <pre data-language="python">from multiprocessing import Process, Value, Array
+
+def f(n, a):
+    n.value = 3.1415927
+    for i in range(len(a)):
+        a[i] = -a[i]
+
+if __name__ == '__main__':
+    num = Value('d', 0.0)
+    arr = Array('i', range(10))
+
+    p = Process(target=f, args=(num, arr))
+    p.start()
+    p.join()
+
+    print(num.value)
+    print(arr[:])
+</pre> <p>will print</p> <pre data-language="python">3.1415927
+[0, -1, -2, -3, -4, -5, -6, -7, -8, -9]
+</pre> <p>The <code>'d'</code> and <code>'i'</code> arguments used when creating <code>num</code> and <code>arr</code> are typecodes of the kind used by the <a class="reference internal" href="array#module-array" title="array: Space efficient arrays of uniformly typed numeric values."><code>array</code></a> module: <code>'d'</code> indicates a double precision float and <code>'i'</code> indicates a signed integer. These shared objects will be process and thread-safe.</p> <p>For more flexibility in using shared memory one can use the <a class="reference internal" href="#module-multiprocessing.sharedctypes" title="multiprocessing.sharedctypes: Allocate ctypes objects from shared memory."><code>multiprocessing.sharedctypes</code></a> module which supports the creation of arbitrary ctypes objects allocated from shared memory.</p> <p><strong>Server process</strong></p> <p>A manager object returned by <code>Manager()</code> controls a server process which holds Python objects and allows other processes to manipulate them using proxies.</p> <p>A manager returned by <code>Manager()</code> will support types <a class="reference internal" href="stdtypes#list" title="list"><code>list</code></a>, <a class="reference internal" href="stdtypes#dict" title="dict"><code>dict</code></a>, <a class="reference internal" href="#multiprocessing.managers.Namespace" title="multiprocessing.managers.Namespace"><code>Namespace</code></a>, <a class="reference internal" href="#multiprocessing.Lock" title="multiprocessing.Lock"><code>Lock</code></a>, <a class="reference internal" href="#multiprocessing.RLock" title="multiprocessing.RLock"><code>RLock</code></a>, <a class="reference internal" href="#multiprocessing.Semaphore" title="multiprocessing.Semaphore"><code>Semaphore</code></a>, <a class="reference internal" href="#multiprocessing.BoundedSemaphore" title="multiprocessing.BoundedSemaphore"><code>BoundedSemaphore</code></a>, <a class="reference internal" href="#multiprocessing.Condition" title="multiprocessing.Condition"><code>Condition</code></a>, <a class="reference internal" href="#multiprocessing.Event" title="multiprocessing.Event"><code>Event</code></a>, <a class="reference internal" href="#multiprocessing.Barrier" title="multiprocessing.Barrier"><code>Barrier</code></a>, <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a>, <a class="reference internal" href="#multiprocessing.Value" title="multiprocessing.Value"><code>Value</code></a> and <a class="reference internal" href="#multiprocessing.Array" title="multiprocessing.Array"><code>Array</code></a>. For example,</p> <pre data-language="python">from multiprocessing import Process, Manager
+
+def f(d, l):
+    d[1] = '1'
+    d['2'] = 2
+    d[0.25] = None
+    l.reverse()
+
+if __name__ == '__main__':
+    with Manager() as manager:
+        d = manager.dict()
+        l = manager.list(range(10))
+
+        p = Process(target=f, args=(d, l))
+        p.start()
+        p.join()
+
+        print(d)
+        print(l)
+</pre> <p>will print</p> <pre data-language="python">{0.25: None, 1: '1', '2': 2}
+[9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+</pre> <p>Server process managers are more flexible than using shared memory objects because they can be made to support arbitrary object types. Also, a single manager can be shared by processes on different computers over a network. They are, however, slower than using shared memory.</p> <h3 id="using-a-pool-of-workers">
+<span class="section-number">17.2.1.6. </span>Using a pool of workers</h3> <p>The <a class="reference internal" href="#multiprocessing.pool.Pool" title="multiprocessing.pool.Pool"><code>Pool</code></a> class represents a pool of worker processes. It has methods which allows tasks to be offloaded to the worker processes in a few different ways.</p> <p>For example:</p> <pre data-language="python">from multiprocessing import Pool, TimeoutError
+import time
+import os
+
+def f(x):
+    return x*x
+
+if __name__ == '__main__':
+    # start 4 worker processes
+    with Pool(processes=4) as pool:
+
+        # print "[0, 1, 4,..., 81]"
+        print(pool.map(f, range(10)))
+
+        # print same numbers in arbitrary order
+        for i in pool.imap_unordered(f, range(10)):
+            print(i)
+
+        # evaluate "f(20)" asynchronously
+        res = pool.apply_async(f, (20,))      # runs in *only* one process
+        print(res.get(timeout=1))             # prints "400"
+
+        # evaluate "os.getpid()" asynchronously
+        res = pool.apply_async(os.getpid, ()) # runs in *only* one process
+        print(res.get(timeout=1))             # prints the PID of that process
+
+        # launching multiple evaluations asynchronously *may* use more processes
+        multiple_results = [pool.apply_async(os.getpid, ()) for i in range(4)]
+        print([res.get(timeout=1) for res in multiple_results])
+
+        # make a single worker sleep for 10 secs
+        res = pool.apply_async(time.sleep, (10,))
+        try:
+            print(res.get(timeout=1))
+        except TimeoutError:
+            print("We lacked patience and got a multiprocessing.TimeoutError")
+
+        print("For the moment, the pool remains available for more work")
+
+    # exiting the 'with'-block has stopped the pool
+    print("Now the pool is closed and no longer available")
+</pre> <p>Note that the methods of a pool should only ever be used by the process which created it.</p> <div class="admonition note"> <p class="admonition-title">Note</p> <p>Functionality within this package requires that the <code>__main__</code> module be importable by the children. This is covered in <a class="reference internal" href="#multiprocessing-programming"><span class="std std-ref">Programming guidelines</span></a> however it is worth pointing out here. This means that some examples, such as the <a class="reference internal" href="#multiprocessing.pool.Pool" title="multiprocessing.pool.Pool"><code>multiprocessing.pool.Pool</code></a> examples will not work in the interactive interpreter. For example:</p> <pre data-language="python">&gt;&gt;&gt; from multiprocessing import Pool
+&gt;&gt;&gt; p = Pool(5)
+&gt;&gt;&gt; def f(x):
+...     return x*x
+...
+&gt;&gt;&gt; p.map(f, [1,2,3])
+Process PoolWorker-1:
+Process PoolWorker-2:
+Process PoolWorker-3:
+Traceback (most recent call last):
+AttributeError: 'module' object has no attribute 'f'
+AttributeError: 'module' object has no attribute 'f'
+AttributeError: 'module' object has no attribute 'f'
+</pre> <p>(If you try this it will actually output three full tracebacks interleaved in a semi-random fashion, and then you may have to stop the master process somehow.)</p> </div> <h2 id="reference">
+<span class="section-number">17.2.2. </span>Reference</h2> <p>The <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> package mostly replicates the API of the <a class="reference internal" href="threading#module-threading" title="threading: Thread-based parallelism."><code>threading</code></a> module.</p> <h3 id="process-and-exceptions">
+<span class="section-number">17.2.2.1. </span><a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> and exceptions</h3> <dl class="class"> <dt id="multiprocessing.Process">
+<code>class multiprocessing.Process(group=None, target=None, name=None, args=(), kwargs={}, *, daemon=None)</code> </dt> <dd>
+<p>Process objects represent activity that is run in a separate process. The <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> class has equivalents of all the methods of <a class="reference internal" href="threading#threading.Thread" title="threading.Thread"><code>threading.Thread</code></a>.</p> <p>The constructor should always be called with keyword arguments. <em>group</em> should always be <code>None</code>; it exists solely for compatibility with <a class="reference internal" href="threading#threading.Thread" title="threading.Thread"><code>threading.Thread</code></a>. <em>target</em> is the callable object to be invoked by the <a class="reference internal" href="#multiprocessing.Process.run" title="multiprocessing.Process.run"><code>run()</code></a> method. It defaults to <code>None</code>, meaning nothing is called. <em>name</em> is the process name (see <a class="reference internal" href="#multiprocessing.Process.name" title="multiprocessing.Process.name"><code>name</code></a> for more details). <em>args</em> is the argument tuple for the target invocation. <em>kwargs</em> is a dictionary of keyword arguments for the target invocation. If provided, the keyword-only <em>daemon</em> argument sets the process <a class="reference internal" href="#multiprocessing.Process.daemon" title="multiprocessing.Process.daemon"><code>daemon</code></a> flag to <code>True</code> or <code>False</code>. If <code>None</code> (the default), this flag will be inherited from the creating process.</p> <p>By default, no arguments are passed to <em>target</em>.</p> <p>If a subclass overrides the constructor, it must make sure it invokes the base class constructor (<code>Process.__init__()</code>) before doing anything else to the process.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.3: </span>Added the <em>daemon</em> argument.</p> </div> <dl class="method"> <dt id="multiprocessing.Process.run">
+<code>run()</code> </dt> <dd>
+<p>Method representing the process’s activity.</p> <p>You may override this method in a subclass. The standard <a class="reference internal" href="#multiprocessing.Process.run" title="multiprocessing.Process.run"><code>run()</code></a> method invokes the callable object passed to the object’s constructor as the target argument, if any, with sequential and keyword arguments taken from the <em>args</em> and <em>kwargs</em> arguments, respectively.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Process.start">
+<code>start()</code> </dt> <dd>
+<p>Start the process’s activity.</p> <p>This must be called at most once per process object. It arranges for the object’s <a class="reference internal" href="#multiprocessing.Process.run" title="multiprocessing.Process.run"><code>run()</code></a> method to be invoked in a separate process.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Process.join">
+<code>join([timeout])</code> </dt> <dd>
+<p>If the optional argument <em>timeout</em> is <code>None</code> (the default), the method blocks until the process whose <a class="reference internal" href="#multiprocessing.Process.join" title="multiprocessing.Process.join"><code>join()</code></a> method is called terminates. If <em>timeout</em> is a positive number, it blocks at most <em>timeout</em> seconds. Note that the method returns <code>None</code> if its process terminates or if the method times out. Check the process’s <a class="reference internal" href="#multiprocessing.Process.exitcode" title="multiprocessing.Process.exitcode"><code>exitcode</code></a> to determine if it terminated.</p> <p>A process can be joined many times.</p> <p>A process cannot join itself because this would cause a deadlock. It is an error to attempt to join a process before it has been started.</p> </dd>
+</dl> <dl class="attribute"> <dt id="multiprocessing.Process.name">
+<code>name</code> </dt> <dd>
+<p>The process’s name. The name is a string used for identification purposes only. It has no semantics. Multiple processes may be given the same name.</p> <p>The initial name is set by the constructor. If no explicit name is provided to the constructor, a name of the form ‘Process-N<sub>1</sub>:N<sub>2</sub>:…:N<sub>k</sub>’ is constructed, where each N<sub>k</sub> is the N-th child of its parent.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Process.is_alive">
+<code>is_alive()</code> </dt> <dd>
+<p>Return whether the process is alive.</p> <p>Roughly, a process object is alive from the moment the <a class="reference internal" href="#multiprocessing.Process.start" title="multiprocessing.Process.start"><code>start()</code></a> method returns until the child process terminates.</p> </dd>
+</dl> <dl class="attribute"> <dt id="multiprocessing.Process.daemon">
+<code>daemon</code> </dt> <dd>
+<p>The process’s daemon flag, a Boolean value. This must be set before <a class="reference internal" href="#multiprocessing.Process.start" title="multiprocessing.Process.start"><code>start()</code></a> is called.</p> <p>The initial value is inherited from the creating process.</p> <p>When a process exits, it attempts to terminate all of its daemonic child processes.</p> <p>Note that a daemonic process is not allowed to create child processes. Otherwise a daemonic process would leave its children orphaned if it gets terminated when its parent process exits. Additionally, these are <strong>not</strong> Unix daemons or services, they are normal processes that will be terminated (and not joined) if non-daemonic processes have exited.</p> </dd>
+</dl> <p>In addition to the <a class="reference internal" href="threading#threading.Thread" title="threading.Thread"><code>threading.Thread</code></a> API, <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> objects also support the following attributes and methods:</p> <dl class="attribute"> <dt id="multiprocessing.Process.pid">
+<code>pid</code> </dt> <dd>
+<p>Return the process ID. Before the process is spawned, this will be <code>None</code>.</p> </dd>
+</dl> <dl class="attribute"> <dt id="multiprocessing.Process.exitcode">
+<code>exitcode</code> </dt> <dd>
+<p>The child’s exit code. This will be <code>None</code> if the process has not yet terminated. A negative value <em>-N</em> indicates that the child was terminated by signal <em>N</em>.</p> </dd>
+</dl> <dl class="attribute"> <dt id="multiprocessing.Process.authkey">
+<code>authkey</code> </dt> <dd>
+<p>The process’s authentication key (a byte string).</p> <p>When <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> is initialized the main process is assigned a random string using <a class="reference internal" href="os#os.urandom" title="os.urandom"><code>os.urandom()</code></a>.</p> <p>When a <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> object is created, it will inherit the authentication key of its parent process, although this may be changed by setting <a class="reference internal" href="#multiprocessing.Process.authkey" title="multiprocessing.Process.authkey"><code>authkey</code></a> to another byte string.</p> <p>See <a class="reference internal" href="#multiprocessing-auth-keys"><span class="std std-ref">Authentication keys</span></a>.</p> </dd>
+</dl> <dl class="attribute"> <dt id="multiprocessing.Process.sentinel">
+<code>sentinel</code> </dt> <dd>
+<p>A numeric handle of a system object which will become “ready” when the process ends.</p> <p>You can use this value if you want to wait on several events at once using <a class="reference internal" href="#multiprocessing.connection.wait" title="multiprocessing.connection.wait"><code>multiprocessing.connection.wait()</code></a>. Otherwise calling <a class="reference internal" href="#multiprocessing.Process.join" title="multiprocessing.Process.join"><code>join()</code></a> is simpler.</p> <p>On Windows, this is an OS handle usable with the <code>WaitForSingleObject</code> and <code>WaitForMultipleObjects</code> family of API calls. On Unix, this is a file descriptor usable with primitives from the <a class="reference internal" href="select#module-select" title="select: Wait for I/O completion on multiple streams."><code>select</code></a> module.</p> <div class="versionadded"> <p><span class="versionmodified added">New in version 3.3.</span></p> </div> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Process.terminate">
+<code>terminate()</code> </dt> <dd>
+<p>Terminate the process. On Unix this is done using the <code>SIGTERM</code> signal; on Windows <code>TerminateProcess()</code> is used. Note that exit handlers and finally clauses, etc., will not be executed.</p> <p>Note that descendant processes of the process will <em>not</em> be terminated – they will simply become orphaned.</p> <div class="admonition warning"> <p class="admonition-title">Warning</p> <p>If this method is used when the associated process is using a pipe or queue then the pipe or queue is liable to become corrupted and may become unusable by other process. Similarly, if the process has acquired a lock or semaphore etc. then terminating it is liable to cause other processes to deadlock.</p> </div> </dd>
+</dl> <p>Note that the <a class="reference internal" href="#multiprocessing.Process.start" title="multiprocessing.Process.start"><code>start()</code></a>, <a class="reference internal" href="#multiprocessing.Process.join" title="multiprocessing.Process.join"><code>join()</code></a>, <a class="reference internal" href="#multiprocessing.Process.is_alive" title="multiprocessing.Process.is_alive"><code>is_alive()</code></a>, <a class="reference internal" href="#multiprocessing.Process.terminate" title="multiprocessing.Process.terminate"><code>terminate()</code></a> and <a class="reference internal" href="#multiprocessing.Process.exitcode" title="multiprocessing.Process.exitcode"><code>exitcode</code></a> methods should only be called by the process that created the process object.</p> <p>Example usage of some of the methods of <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a>:</p> <pre data-language="pycon3">&gt;&gt;&gt; import multiprocessing, time, signal
+&gt;&gt;&gt; p = multiprocessing.Process(target=time.sleep, args=(1000,))
+&gt;&gt;&gt; print(p, p.is_alive())
+&lt;Process(Process-1, initial)&gt; False
+&gt;&gt;&gt; p.start()
+&gt;&gt;&gt; print(p, p.is_alive())
+&lt;Process(Process-1, started)&gt; True
+&gt;&gt;&gt; p.terminate()
+&gt;&gt;&gt; time.sleep(0.1)
+&gt;&gt;&gt; print(p, p.is_alive())
+&lt;Process(Process-1, stopped[SIGTERM])&gt; False
+&gt;&gt;&gt; p.exitcode == -signal.SIGTERM
+True
+</pre> </dd>
+</dl> <dl class="exception"> <dt id="multiprocessing.ProcessError">
+<code>exception multiprocessing.ProcessError</code> </dt> <dd>
+<p>The base class of all <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> exceptions.</p> </dd>
+</dl> <dl class="exception"> <dt id="multiprocessing.BufferTooShort">
+<code>exception multiprocessing.BufferTooShort</code> </dt> <dd>
+<p>Exception raised by <code>Connection.recv_bytes_into()</code> when the supplied buffer object is too small for the message read.</p> <p>If <code>e</code> is an instance of <a class="reference internal" href="#multiprocessing.BufferTooShort" title="multiprocessing.BufferTooShort"><code>BufferTooShort</code></a> then <code>e.args[0]</code> will give the message as a byte string.</p> </dd>
+</dl> <dl class="exception"> <dt id="multiprocessing.AuthenticationError">
+<code>exception multiprocessing.AuthenticationError</code> </dt> <dd>
+<p>Raised when there is an authentication error.</p> </dd>
+</dl> <dl class="exception"> <dt id="multiprocessing.TimeoutError">
+<code>exception multiprocessing.TimeoutError</code> </dt> <dd>
+<p>Raised by methods with a timeout when the timeout expires.</p> </dd>
+</dl> <h3 id="pipes-and-queues">
+<span class="section-number">17.2.2.2. </span>Pipes and Queues</h3> <p>When using multiple processes, one generally uses message passing for communication between processes and avoids having to use any synchronization primitives like locks.</p> <p>For passing messages one can use <a class="reference internal" href="#multiprocessing.Pipe" title="multiprocessing.Pipe"><code>Pipe()</code></a> (for a connection between two processes) or a queue (which allows multiple producers and consumers).</p> <p>The <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a>, <a class="reference internal" href="#multiprocessing.SimpleQueue" title="multiprocessing.SimpleQueue"><code>SimpleQueue</code></a> and <a class="reference internal" href="#multiprocessing.JoinableQueue" title="multiprocessing.JoinableQueue"><code>JoinableQueue</code></a> types are multi-producer, multi-consumer <abbr title="first-in, first-out">FIFO</abbr> queues modelled on the <a class="reference internal" href="queue#queue.Queue" title="queue.Queue"><code>queue.Queue</code></a> class in the standard library. They differ in that <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a> lacks the <a class="reference internal" href="queue#queue.Queue.task_done" title="queue.Queue.task_done"><code>task_done()</code></a> and <a class="reference internal" href="queue#queue.Queue.join" title="queue.Queue.join"><code>join()</code></a> methods introduced into Python 2.5’s <a class="reference internal" href="queue#queue.Queue" title="queue.Queue"><code>queue.Queue</code></a> class.</p> <p>If you use <a class="reference internal" href="#multiprocessing.JoinableQueue" title="multiprocessing.JoinableQueue"><code>JoinableQueue</code></a> then you <strong>must</strong> call <a class="reference internal" href="#multiprocessing.JoinableQueue.task_done" title="multiprocessing.JoinableQueue.task_done"><code>JoinableQueue.task_done()</code></a> for each task removed from the queue or else the semaphore used to count the number of unfinished tasks may eventually overflow, raising an exception.</p> <p>Note that one can also create a shared queue by using a manager object – see <a class="reference internal" href="#multiprocessing-managers"><span class="std std-ref">Managers</span></a>.</p> <div class="admonition note"> <p class="admonition-title">Note</p> <p><a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> uses the usual <a class="reference internal" href="queue#queue.Empty" title="queue.Empty"><code>queue.Empty</code></a> and <a class="reference internal" href="queue#queue.Full" title="queue.Full"><code>queue.Full</code></a> exceptions to signal a timeout. They are not available in the <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> namespace so you need to import them from <a class="reference internal" href="queue#module-queue" title="queue: A synchronized queue class."><code>queue</code></a>.</p> </div> <div class="admonition note"> <p class="admonition-title">Note</p> <p>When an object is put on a queue, the object is pickled and a background thread later flushes the pickled data to an underlying pipe. This has some consequences which are a little surprising, but should not cause any practical difficulties – if they really bother you then you can instead use a queue created with a <a class="reference internal" href="#multiprocessing-managers"><span class="std std-ref">manager</span></a>.</p> <ol class="arabic simple"> <li>After putting an object on an empty queue there may be an infinitesimal delay before the queue’s <a class="reference internal" href="#multiprocessing.Queue.empty" title="multiprocessing.Queue.empty"><code>empty()</code></a> method returns <a class="reference internal" href="constants#False" title="False"><code>False</code></a> and <a class="reference internal" href="#multiprocessing.Queue.get_nowait" title="multiprocessing.Queue.get_nowait"><code>get_nowait()</code></a> can return without raising <a class="reference internal" href="queue#queue.Empty" title="queue.Empty"><code>queue.Empty</code></a>.</li> <li>If multiple processes are enqueuing objects, it is possible for the objects to be received at the other end out-of-order. However, objects enqueued by the same process will always be in the expected order with respect to each other.</li> </ol> </div> <div class="admonition warning"> <p class="admonition-title">Warning</p> <p>If a process is killed using <a class="reference internal" href="#multiprocessing.Process.terminate" title="multiprocessing.Process.terminate"><code>Process.terminate()</code></a> or <a class="reference internal" href="os#os.kill" title="os.kill"><code>os.kill()</code></a> while it is trying to use a <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a>, then the data in the queue is likely to become corrupted. This may cause any other process to get an exception when it tries to use the queue later on.</p> </div> <div class="admonition warning"> <p class="admonition-title">Warning</p> <p>As mentioned above, if a child process has put items on a queue (and it has not used <a class="reference internal" href="#multiprocessing.Queue.cancel_join_thread" title="multiprocessing.Queue.cancel_join_thread"><code>JoinableQueue.cancel_join_thread</code></a>), then that process will not terminate until all buffered items have been flushed to the pipe.</p> <p>This means that if you try joining that process you may get a deadlock unless you are sure that all items which have been put on the queue have been consumed. Similarly, if the child process is non-daemonic then the parent process may hang on exit when it tries to join all its non-daemonic children.</p> <p>Note that a queue created using a manager does not have this issue. See <a class="reference internal" href="#multiprocessing-programming"><span class="std std-ref">Programming guidelines</span></a>.</p> </div> <p>For an example of the usage of queues for interprocess communication see <a class="reference internal" href="#multiprocessing-examples"><span class="std std-ref">Examples</span></a>.</p> <dl class="function"> <dt id="multiprocessing.Pipe">
+<code>multiprocessing.Pipe([duplex])</code> </dt> <dd>
+<p>Returns a pair <code>(conn1, conn2)</code> of <a class="reference internal" href="#multiprocessing.connection.Connection" title="multiprocessing.connection.Connection"><code>Connection</code></a> objects representing the ends of a pipe.</p> <p>If <em>duplex</em> is <code>True</code> (the default) then the pipe is bidirectional. If <em>duplex</em> is <code>False</code> then the pipe is unidirectional: <code>conn1</code> can only be used for receiving messages and <code>conn2</code> can only be used for sending messages.</p> </dd>
+</dl> <dl class="class"> <dt id="multiprocessing.Queue">
+<code>class multiprocessing.Queue([maxsize])</code> </dt> <dd>
+<p>Returns a process shared queue implemented using a pipe and a few locks/semaphores. When a process first puts an item on the queue a feeder thread is started which transfers objects from a buffer into the pipe.</p> <p>The usual <a class="reference internal" href="queue#queue.Empty" title="queue.Empty"><code>queue.Empty</code></a> and <a class="reference internal" href="queue#queue.Full" title="queue.Full"><code>queue.Full</code></a> exceptions from the standard library’s <a class="reference internal" href="queue#module-queue" title="queue: A synchronized queue class."><code>queue</code></a> module are raised to signal timeouts.</p> <p><a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a> implements all the methods of <a class="reference internal" href="queue#queue.Queue" title="queue.Queue"><code>queue.Queue</code></a> except for <a class="reference internal" href="queue#queue.Queue.task_done" title="queue.Queue.task_done"><code>task_done()</code></a> and <a class="reference internal" href="queue#queue.Queue.join" title="queue.Queue.join"><code>join()</code></a>.</p> <dl class="method"> <dt id="multiprocessing.Queue.qsize">
+<code>qsize()</code> </dt> <dd>
+<p>Return the approximate size of the queue. Because of multithreading/multiprocessing semantics, this number is not reliable.</p> <p>Note that this may raise <a class="reference internal" href="exceptions#NotImplementedError" title="NotImplementedError"><code>NotImplementedError</code></a> on Unix platforms like Mac OS X where <code>sem_getvalue()</code> is not implemented.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.empty">
+<code>empty()</code> </dt> <dd>
+<p>Return <code>True</code> if the queue is empty, <code>False</code> otherwise. Because of multithreading/multiprocessing semantics, this is not reliable.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.full">
+<code>full()</code> </dt> <dd>
+<p>Return <code>True</code> if the queue is full, <code>False</code> otherwise. Because of multithreading/multiprocessing semantics, this is not reliable.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.put">
+<code>put(obj[, block[, timeout]])</code> </dt> <dd>
+<p>Put obj into the queue. If the optional argument <em>block</em> is <code>True</code> (the default) and <em>timeout</em> is <code>None</code> (the default), block if necessary until a free slot is available. If <em>timeout</em> is a positive number, it blocks at most <em>timeout</em> seconds and raises the <a class="reference internal" href="queue#queue.Full" title="queue.Full"><code>queue.Full</code></a> exception if no free slot was available within that time. Otherwise (<em>block</em> is <code>False</code>), put an item on the queue if a free slot is immediately available, else raise the <a class="reference internal" href="queue#queue.Full" title="queue.Full"><code>queue.Full</code></a> exception (<em>timeout</em> is ignored in that case).</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.put_nowait">
+<code>put_nowait(obj)</code> </dt> <dd>
+<p>Equivalent to <code>put(obj, False)</code>.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.get">
+<code>get([block[, timeout]])</code> </dt> <dd>
+<p>Remove and return an item from the queue. If optional args <em>block</em> is <code>True</code> (the default) and <em>timeout</em> is <code>None</code> (the default), block if necessary until an item is available. If <em>timeout</em> is a positive number, it blocks at most <em>timeout</em> seconds and raises the <a class="reference internal" href="queue#queue.Empty" title="queue.Empty"><code>queue.Empty</code></a> exception if no item was available within that time. Otherwise (block is <code>False</code>), return an item if one is immediately available, else raise the <a class="reference internal" href="queue#queue.Empty" title="queue.Empty"><code>queue.Empty</code></a> exception (<em>timeout</em> is ignored in that case).</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.get_nowait">
+<code>get_nowait()</code> </dt> <dd>
+<p>Equivalent to <code>get(False)</code>.</p> </dd>
+</dl> <p><a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>multiprocessing.Queue</code></a> has a few additional methods not found in <a class="reference internal" href="queue#queue.Queue" title="queue.Queue"><code>queue.Queue</code></a>. These methods are usually unnecessary for most code:</p> <dl class="method"> <dt id="multiprocessing.Queue.close">
+<code>close()</code> </dt> <dd>
+<p>Indicate that no more data will be put on this queue by the current process. The background thread will quit once it has flushed all buffered data to the pipe. This is called automatically when the queue is garbage collected.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.join_thread">
+<code>join_thread()</code> </dt> <dd>
+<p>Join the background thread. This can only be used after <a class="reference internal" href="#multiprocessing.Queue.close" title="multiprocessing.Queue.close"><code>close()</code></a> has been called. It blocks until the background thread exits, ensuring that all data in the buffer has been flushed to the pipe.</p> <p>By default if a process is not the creator of the queue then on exit it will attempt to join the queue’s background thread. The process can call <a class="reference internal" href="#multiprocessing.Queue.cancel_join_thread" title="multiprocessing.Queue.cancel_join_thread"><code>cancel_join_thread()</code></a> to make <a class="reference internal" href="#multiprocessing.Queue.join_thread" title="multiprocessing.Queue.join_thread"><code>join_thread()</code></a> do nothing.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.Queue.cancel_join_thread">
+<code>cancel_join_thread()</code> </dt> <dd>
+<p>Prevent <a class="reference internal" href="#multiprocessing.Queue.join_thread" title="multiprocessing.Queue.join_thread"><code>join_thread()</code></a> from blocking. In particular, this prevents the background thread from being joined automatically when the process exits – see <a class="reference internal" href="#multiprocessing.Queue.join_thread" title="multiprocessing.Queue.join_thread"><code>join_thread()</code></a>.</p> <p>A better name for this method might be <code>allow_exit_without_flush()</code>. It is likely to cause enqueued data to lost, and you almost certainly will not need to use it. It is really only there if you need the current process to exit immediately without waiting to flush enqueued data to the underlying pipe, and you don’t care about lost data.</p> </dd>
+</dl> <div class="admonition note"> <p class="admonition-title">Note</p> <p>This class’s functionality requires a functioning shared semaphore implementation on the host operating system. Without one, the functionality in this class will be disabled, and attempts to instantiate a <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a> will result in an <a class="reference internal" href="exceptions#ImportError" title="ImportError"><code>ImportError</code></a>. See bpo-3770 for additional information. The same holds true for any of the specialized queue types listed below.</p> </div> </dd>
+</dl> <dl class="class"> <dt id="multiprocessing.SimpleQueue">
+<code>class multiprocessing.SimpleQueue</code> </dt> <dd>
+<p>It is a simplified <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a> type, very close to a locked <a class="reference internal" href="#multiprocessing.Pipe" title="multiprocessing.Pipe"><code>Pipe</code></a>.</p> <dl class="method"> <dt id="multiprocessing.SimpleQueue.empty">
+<code>empty()</code> </dt> <dd>
+<p>Return <code>True</code> if the queue is empty, <code>False</code> otherwise.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.SimpleQueue.get">
+<code>get()</code> </dt> <dd>
+<p>Remove and return an item from the queue.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.SimpleQueue.put">
+<code>put(item)</code> </dt> <dd>
+<p>Put <em>item</em> into the queue.</p> </dd>
+</dl> </dd>
+</dl> <dl class="class"> <dt id="multiprocessing.JoinableQueue">
+<code>class multiprocessing.JoinableQueue([maxsize])</code> </dt> <dd>
+<p><a class="reference internal" href="#multiprocessing.JoinableQueue" title="multiprocessing.JoinableQueue"><code>JoinableQueue</code></a>, a <a class="reference internal" href="#multiprocessing.Queue" title="multiprocessing.Queue"><code>Queue</code></a> subclass, is a queue which additionally has <a class="reference internal" href="#multiprocessing.JoinableQueue.task_done" title="multiprocessing.JoinableQueue.task_done"><code>task_done()</code></a> and <a class="reference internal" href="#multiprocessing.JoinableQueue.join" title="multiprocessing.JoinableQueue.join"><code>join()</code></a> methods.</p> <dl class="method"> <dt id="multiprocessing.JoinableQueue.task_done">
+<code>task_done()</code> </dt> <dd>
+<p>Indicate that a formerly enqueued task is complete. Used by queue consumers. For each <a class="reference internal" href="#multiprocessing.Queue.get" title="multiprocessing.Queue.get"><code>get()</code></a> used to fetch a task, a subsequent call to <a class="reference internal" href="#multiprocessing.JoinableQueue.task_done" title="multiprocessing.JoinableQueue.task_done"><code>task_done()</code></a> tells the queue that the processing on the task is complete.</p> <p>If a <a class="reference internal" href="queue#queue.Queue.join" title="queue.Queue.join"><code>join()</code></a> is currently blocking, it will resume when all items have been processed (meaning that a <a class="reference internal" href="#multiprocessing.JoinableQueue.task_done" title="multiprocessing.JoinableQueue.task_done"><code>task_done()</code></a> call was received for every item that had been <a class="reference internal" href="#multiprocessing.Queue.put" title="multiprocessing.Queue.put"><code>put()</code></a> into the queue).</p> <p>Raises a <a class="reference internal" href="exceptions#ValueError" title="ValueError"><code>ValueError</code></a> if called more times than there were items placed in the queue.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.JoinableQueue.join">
+<code>join()</code> </dt> <dd>
+<p>Block until all items in the queue have been gotten and processed.</p> <p>The count of unfinished tasks goes up whenever an item is added to the queue. The count goes down whenever a consumer calls <a class="reference internal" href="#multiprocessing.JoinableQueue.task_done" title="multiprocessing.JoinableQueue.task_done"><code>task_done()</code></a> to indicate that the item was retrieved and all work on it is complete. When the count of unfinished tasks drops to zero, <a class="reference internal" href="queue#queue.Queue.join" title="queue.Queue.join"><code>join()</code></a> unblocks.</p> </dd>
+</dl> </dd>
+</dl> <h3 id="miscellaneous">
+<span class="section-number">17.2.2.3. </span>Miscellaneous</h3> <dl class="function"> <dt id="multiprocessing.active_children">
+<code>multiprocessing.active_children()</code> </dt> <dd>
+<p>Return list of all live children of the current process.</p> <p>Calling this has the side effect of “joining” any processes which have already finished.</p> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.cpu_count">
+<code>multiprocessing.cpu_count()</code> </dt> <dd>
+<p>Return the number of CPUs in the system.</p> <p>This number is not equivalent to the number of CPUs the current process can use. The number of usable CPUs can be obtained with <code>len(os.sched_getaffinity(0))</code></p> <p>May raise <a class="reference internal" href="exceptions#NotImplementedError" title="NotImplementedError"><code>NotImplementedError</code></a>.</p> <div class="admonition seealso"> <p class="admonition-title">See also</p> <p><a class="reference internal" href="os#os.cpu_count" title="os.cpu_count"><code>os.cpu_count()</code></a></p> </div> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.current_process">
+<code>multiprocessing.current_process()</code> </dt> <dd>
+<p>Return the <a class="reference internal" href="#multiprocessing.Process" title="multiprocessing.Process"><code>Process</code></a> object corresponding to the current process.</p> <p>An analogue of <a class="reference internal" href="threading#threading.current_thread" title="threading.current_thread"><code>threading.current_thread()</code></a>.</p> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.freeze_support">
+<code>multiprocessing.freeze_support()</code> </dt> <dd>
+<p>Add support for when a program which uses <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> has been frozen to produce a Windows executable. (Has been tested with <strong>py2exe</strong>, <strong>PyInstaller</strong> and <strong>cx_Freeze</strong>.)</p> <p>One needs to call this function straight after the <code>if __name__ ==
+'__main__'</code> line of the main module. For example:</p> <pre data-language="python">from multiprocessing import Process, freeze_support
+
+def f():
+    print('hello world!')
+
+if __name__ == '__main__':
+    freeze_support()
+    Process(target=f).start()
+</pre> <p>If the <code>freeze_support()</code> line is omitted then trying to run the frozen executable will raise <a class="reference internal" href="exceptions#RuntimeError" title="RuntimeError"><code>RuntimeError</code></a>.</p> <p>Calling <code>freeze_support()</code> has no effect when invoked on any operating system other than Windows. In addition, if the module is being run normally by the Python interpreter on Windows (the program has not been frozen), then <code>freeze_support()</code> has no effect.</p> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.get_all_start_methods">
+<code>multiprocessing.get_all_start_methods()</code> </dt> <dd>
+<p>Returns a list of the supported start methods, the first of which is the default. The possible start methods are <code>'fork'</code>, <code>'spawn'</code> and <code>'forkserver'</code>. On Windows only <code>'spawn'</code> is available. On Unix <code>'fork'</code> and <code>'spawn'</code> are always supported, with <code>'fork'</code> being the default.</p> <div class="versionadded"> <p><span class="versionmodified added">New in version 3.4.</span></p> </div> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.get_context">
+<code>multiprocessing.get_context(method=None)</code> </dt> <dd>
+<p>Return a context object which has the same attributes as the <a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> module.</p> <p>If <em>method</em> is <code>None</code> then the default context is returned. Otherwise <em>method</em> should be <code>'fork'</code>, <code>'spawn'</code>, <code>'forkserver'</code>. <a class="reference internal" href="exceptions#ValueError" title="ValueError"><code>ValueError</code></a> is raised if the specified start method is not available.</p> <div class="versionadded"> <p><span class="versionmodified added">New in version 3.4.</span></p> </div> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.get_start_method">
+<code>multiprocessing.get_start_method(allow_none=False)</code> </dt> <dd>
+<p>Return the name of start method used for starting processes.</p> <p>If the start method has not been fixed and <em>allow_none</em> is false, then the start method is fixed to the default and the name is returned. If the start method has not been fixed and <em>allow_none</em> is true then <code>None</code> is returned.</p> <p>The return value can be <code>'fork'</code>, <code>'spawn'</code>, <code>'forkserver'</code> or <code>None</code>. <code>'fork'</code> is the default on Unix, while <code>'spawn'</code> is the default on Windows.</p> <div class="versionadded"> <p><span class="versionmodified added">New in version 3.4.</span></p> </div> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.set_executable">
+<code>multiprocessing.set_executable()</code> </dt> <dd>
+<p>Sets the path of the Python interpreter to use when starting a child process. (By default <a class="reference internal" href="sys#sys.executable" title="sys.executable"><code>sys.executable</code></a> is used). Embedders will probably need to do some thing like</p> <pre data-language="python">set_executable(os.path.join(sys.exec_prefix, 'pythonw.exe'))
+</pre> <p>before they can create child processes.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.4: </span>Now supported on Unix when the <code>'spawn'</code> start method is used.</p> </div> </dd>
+</dl> <dl class="function"> <dt id="multiprocessing.set_start_method">
+<code>multiprocessing.set_start_method(method)</code> </dt> <dd>
+<p>Set the method which should be used to start child processes. <em>method</em> can be <code>'fork'</code>, <code>'spawn'</code> or <code>'forkserver'</code>.</p> <p>Note that this should be called at most once, and it should be protected inside the <code>if __name__ == '__main__'</code> clause of the main module.</p> <div class="versionadded"> <p><span class="versionmodified added">New in version 3.4.</span></p> </div> </dd>
+</dl> <div class="admonition note"> <p class="admonition-title">Note</p> <p><a class="reference internal" href="#module-multiprocessing" title="multiprocessing: Process-based parallelism."><code>multiprocessing</code></a> contains no analogues of <a class="reference internal" href="threading#threading.active_count" title="threading.active_count"><code>threading.active_count()</code></a>, <a class="reference internal" href="threading#threading.enumerate" title="threading.enumerate"><code>threading.enumerate()</code></a>, <a class="reference internal" href="threading#threading.settrace" title="threading.settrace"><code>threading.settrace()</code></a>, <a class="reference internal" href="threading#threading.setprofile" title="threading.setprofile"><code>threading.setprofile()</code></a>, <a class="reference internal" href="threading#threading.Timer" title="threading.Timer"><code>threading.Timer</code></a>, or <a class="reference internal" href="threading#threading.local" title="threading.local"><code>threading.local</code></a>.</p> </div> <h3 id="connection-objects">
+<span class="section-number">17.2.2.4. </span>Connection Objects</h3> <p>Connection objects allow the sending and receiving of picklable objects or strings. They can be thought of as message oriented connected sockets.</p> <p>Connection objects are usually created using <a class="reference internal" href="#multiprocessing.Pipe" title="multiprocessing.Pipe"><code>Pipe</code></a> – see also <a class="reference internal" href="#multiprocessing-listeners-clients"><span class="std std-ref">Listeners and Clients</span></a>.</p> <dl class="class"> <dt id="multiprocessing.connection.Connection">
+<code>class multiprocessing.connection.Connection</code> </dt> <dd>
+<dl class="method"> <dt id="multiprocessing.connection.Connection.send">
+<code>send(obj)</code> </dt> <dd>
+<p>Send an object to the other end of the connection which should be read using <a class="reference internal" href="#multiprocessing.connection.Connection.recv" title="multiprocessing.connection.Connection.recv"><code>recv()</code></a>.</p> <p>The object must be picklable. Very large pickles (approximately 32 MB+, though it depends on the OS) may raise a <a class="reference internal" href="exceptions#ValueError" title="ValueError"><code>ValueError</code></a> exception.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.connection.Connection.recv">
+<code>recv()</code> </dt> <dd>
+<p>Return an object sent from the other end of the connection using <a class="reference internal" href="#multiprocessing.connection.Connection.send" title="multiprocessing.connection.Connection.send"><code>send()</code></a>. Blocks until there is something to receive. Raises <a class="reference internal" href="exceptions#EOFError" title="EOFError"><code>EOFError</code></a> if there is nothing left to receive and the other end was closed.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.connection.Connection.fileno">
+<code>fileno()</code> </dt> <dd>
+<p>Return the file descriptor or handle used by the connection.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.connection.Connection.close">
+<code>close()</code> </dt> <dd>
+<p>Close the connection.</p> <p>This is called automatically when the connection is garbage collected.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.connection.Connection.poll">
+<code>poll([timeout])</code> </dt> <dd>
+<p>Return whether there is any data available to be read.</p> <p>If <em>timeout</em> is not specified then it will return immediately. If <em>timeout</em> is a number then this specifies the maximum time in seconds to block. If <em>timeout</em> is <code>None</code> then an infinite timeout is used.</p> <p>Note that multiple connection objects may be polled at once by using <a class="reference internal" href="#multiprocessing.connection.wait" title="multiprocessing.connection.wait"><code>multiprocessing.connection.wait()</code></a>.</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.connection.Connection.send_bytes">
+<code>send_bytes(buffer[, offset[, size]])</code> </dt> <dd>
+<p>Send byte data from a <span class="xref std std-term">bytes-like object</span> as a complete message.</p> <p>If <em>offset</em> is given then data is read from that position in <em>buffer</em>. If <em>size</em> is given then that many bytes will be read from buffer. Very large buffers (approximately 32 MB+, though it depends on the OS) may raise a <a class="reference internal" href="exceptions#ValueError" title="ValueError"><code>ValueError</code></a> exception</p> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.connection.Connection.recv_bytes">
+<code>recv_bytes([maxlength])</code> </dt> <dd>
+<p>Return a complete message of byte data sent from the other end of the connection as a string. Blocks until there is something to receive. Raises <a class="reference internal" href="exceptions#EOFError" title="EOFError"><code>EOFError</code></a> if there is nothing left to receive and the other end has closed.</p> <p>If <em>maxlength</em> is specified and the message is longer than <em>maxlength</em> then <a class="reference internal" href="exceptions#OSError" title="OSError"><code>OSError</code></a> is raised and the connection will no longer be readable.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.3: </span>This function used to raise <a class="reference internal" href="exceptions#IOError" title="IOError"><code>IOError</code></a>, which is now an alias of <a class="reference internal" href="exceptions#OSError" title="OSError"><code>OSError</code></a>.</p> </div> </dd>
+</dl> <dl class="method"> <dt id="multiprocessing.connection.Connection.recv_bytes_into">
+<code>recv_bytes_into(buffer[, offset])</code> </dt> <dd>
+<p>Read into <em>buffer</em> a complete message of byte data sent from the other end of the connection and return the number of bytes in the message. Blocks until there is something to receive. Raises <a class="reference internal" href="exceptions#EOFError" title="EOFError"><code>EOFError</code></a> if there is nothing left to receive and the other end was closed.</p> <p><em>buffer</em> must be a writable <span class="xref std std-term">bytes-like object</span>. If <em>offset</em> is given then the message will be written into the buffer from that position. Offset must be a non-negative integer less than the length of <em>buffer</em> (in bytes).</p> <p>If the buffer is too short then a <code>BufferTooShort</code> exception is raised and the complete message is available as <code>e.args[0]</code> where <code>e</code> is the exception instance.</p> </dd>
+</dl> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 3.3: </span>Connection objects themselves can now be transferred between processes using <

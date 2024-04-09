@@ -3,10 +3,9 @@
 
 <head>
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-        <script src="./javascript_files/fuse.js@6.6.2"></script>
-        <script src="./javascript_files/vue@2.6.12"></script>
-        <link rel="stylesheet" href="./javascript_files/font-awesome.min.css">
-        <link rel="stylesheet" href="./javascript_files/bulma.min.css">
+        <script src="../vue@2.6.12"></script>
+        <link rel="stylesheet" href="../font-awesome.min.css">
+        <link rel="stylesheet" href="../bulma.min.css">
         <meta name="robots" content="noindex">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
@@ -2879,42 +2878,117 @@
                 new Vue({
                         el: '#app',
                         data: {
-                                pageContent: ''
+                                pageContent: '',
+                                baseUrl: ''
+                        },
+                        methods: {
+                                loadPage(pageUrl) {
+                                        // Split the path and fragment
+                                        const parts = pageUrl.split('#');
+                                        let path = parts[0];
+                                        let fragment = parts[1] ? `#${parts[1]}` : '';
+
+                                        // Append .html to the path if it doesn't end with .html
+                                        if (!path.endsWith('.html')) {
+                                                path += '.html';
+                                        }
+
+                                        // Reconstruct the pageUrl
+                                        pageUrl = path + fragment;
+                                        fetch(pageUrl)
+                                                .then(response => response.text())
+                                                .then(data => {
+                                                        // Set the base URL to the current page's URL
+                                                        this.baseUrl = new URL(pageUrl, window.location.href).href;
+                                                        // Resolve any relative paths in the loaded content
+                                                        data = this.resolveRelativePaths(data);
+                                                        this.pageContent = data;
+                                                });
+                                },
+                                resolveRelativePaths(htmlContent) {
+                                        // Create a temporary div to parse the HTML content
+                                        const tempDiv = document.createElement('div');
+                                        tempDiv.innerHTML = htmlContent;
+
+                                        // Find all elements with href/src attributes
+                                        tempDiv.querySelectorAll('[href], [src]').forEach(element => {
+                                                // Resolve the URL against the base URL
+                                                const href = element.getAttribute('href');
+                                                const src = element.getAttribute('src');
+                                                if (href) {
+                                                        element.setAttribute('href', new URL(href, this.baseUrl).href);
+                                                }
+                                                if (src) {
+                                                        element.setAttribute('src', new URL(src, this.baseUrl).href);
+                                                }
+                                        });
+
+                                        // Return the modified HTML content
+                                        return tempDiv.innerHTML;
+                                },
+                                handleAnchorClick(event) {
+                                        let target = event.target;
+                                        while (target && target.tagName !== 'A') {
+                                                target = target.parentElement;
+                                        }
+                                        if (target) {
+                                                event.preventDefault(); // Prevent the default behavior of anchor tags
+                                                const href = target.getAttribute('href');
+                                                if (href) {
+                                                        this.loadPage(href);
+                                                }
+                                        }
+                                },
+                                goBack() {
+                                        this.pageContent = ""
+                                },
+                                handleLinkClick(event) {
+                                        const target = event.target;
+                                        if (target.tagName === 'A' && target.getAttribute('href')) {
+                                                const href = target.getAttribute('href');
+                                                this.loadPage(href);
+                                                event.preventDefault(); // Prevent the default link behavior
+                                        }
+                                }
                         },
                         directives: {
                                 unclickable: {
                                         // Called when the bound element is inserted into the DOM
                                         inserted: function (el) {
-                                                // Find all <a> elements inside the bound element
-                                                const links = el.querySelectorAll('a');
-                                                links.forEach(link => {
-                                                        // Disable click event
-                                                        link.addEventListener('click', (e) => {
+                                                // Function to check if the element or any of its ancestors match a specific selector
+                                                const closest = function (elem, selector) {
+                                                        while (elem) {
+                                                                if (elem.matches(selector)) return elem;
+                                                                elem = elem.parentElement;
+                                                        }
+                                                        return null;
+                                                };
+
+                                                el.addEventListener('contextmenu', (e) => {
+                                                        // Check if the event target is an <a> tag or a descendant of an <a> tag
+                                                        const isAnchorOrDescendant = closest(e.target, 'a') !== null;
+                                                        if (isAnchorOrDescendant) {
                                                                 e.preventDefault();
-                                                        });
-                                                        // Disable context menu
-                                                        link.addEventListener('contextmenu', (e) => {
-                                                                e.preventDefault();
-                                                        });
+                                                        }
                                                 });
                                         }
                                 }
                         },
-                        methods: {
-                                loadPage(pageUrl) {
-                                        fetch(pageUrl)
-                                                .then(response => response.text())
-                                                .then(data => {
-                                                        this.pageContent = data;
-                                                });
-                                },
-                                goBack() {
-                                        this.pageContent = ""
-                                },
+                        created() {
+                                // Listen for clicks on the #app element and delegate to handleLinkClick
+                                document.querySelector('#app').addEventListener('click', this.handleLinkClick);
+                        },
+
+                        destroyed() {
+                                // Remove the event listener when the component is destroyed to prevent memory leaks
+                                document.querySelector('#app').removeEventListener('click', this.handleLinkClick);
+                        },
+                        mounted() {
+                                // Event delegation for anchor tags
+                                document.querySelector('#app').addEventListener('click', this.handleAnchorClick);
                         },
                         watch: {
                                 pageContent() {
-                                        // Scroll to the top with smooth behavior
                                         scrollTo({
                                                 top: 0,
                                                 behavior: 'smooth'
@@ -2923,6 +2997,7 @@
                         }
                 });
         </script>
+
 
 </body>
 
